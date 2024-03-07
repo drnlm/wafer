@@ -54,7 +54,7 @@ def mock_avatar_url(self):
 
 
 # Time to wait for elements to appear - single constant so we can easily tune it if needed
-SELENIUM_WAIT_TIME = 120
+SELENIUM_WAIT_TIME = 20
 
 
 @tag('selenium')

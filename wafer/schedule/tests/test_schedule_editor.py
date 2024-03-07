@@ -133,9 +133,15 @@ class EditorTestsMixin:
     def test_access_schedule_editor_no_login(self):
         """Test that the schedule editor isn't accessible if not logged in"""
         self.driver.get(self.edit_page)
-        header = WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
-           expected_conditions.presence_of_element_located((By.TAG_NAME, "h1"))
-        )
+        print(self.driver.page_source)
+        try:
+            header = WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
+               expected_conditions.presence_of_element_located((By.TAG_NAME, "h1"))
+            )
+        except TimeoutErrror:
+            print(self.driver.page_source)
+            print(driver.find_element(By.TAG_NAME, "h1"))
+            self.assertEqual(True, False)
         self.assertEqual('Django administration', header.text)
         login = self.driver.find_element(By.ID, "login-form")
         self.assertIsNotNone(login)
