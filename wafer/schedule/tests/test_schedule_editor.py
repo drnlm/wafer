@@ -160,7 +160,7 @@ class EditorTestsMixin:
         self.driver.get(self.edit_page)
         if self.is_django_5:
             WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
-               expected_conditions.presence_of_element_located((By.ID, "header"))
+               expected_conditions.presence_of_element_located((By.ID, "true"))
             )
         else:
             WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
