@@ -143,7 +143,7 @@ class EditorTestsMixin:
             )
         else:
             header = WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
-                expected_conditions.presence_of_element_located((By.TAG_NAME, "true"))
+                expected_conditions.presence_of_element_located((By.TAG_NAME, "h1"))
         )
         self.assertIn('Django administration', header.text)
         login = self.driver.find_element(By.ID, "login-form")
