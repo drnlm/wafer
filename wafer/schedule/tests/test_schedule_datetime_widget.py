@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.urls import reverse
 
 from wafer.pages.models import Page
-from wafer.tests.utils import ChromeTestRunner, FirefoxTestRunner, SELENIUM_WAIT_TIME
+from wafer.tests.utils import ChromeTestRunner, FirefoxTestRunner, SELENIUM_WAIT_TIME, test_timeout_debug
 
 from wafer.schedule.models import Venue, Slot, ScheduleBlock
 from wafer.schedule.tests.test_views import make_pages, make_items
@@ -73,6 +73,7 @@ class ScheduleDateTimeJSMixin:
             time_str = f'{time:02d}:00'
             self.assertIn(time_str, seen_times)
 
+    @test_timeout_debug
     def test_datetime_widget_slot_admin_changelist(self):
         """Test that the datetime widget lists the desired times in the list view"""
         self.admin_login()
@@ -81,6 +82,7 @@ class ScheduleDateTimeJSMixin:
         self.driver.get(f"{self.live_server_url}{slot_admin_list_url}")
         self.check_clock_button()
 
+    @test_timeout_debug
     def test_datetime_widget_slot_admin_change(self):
         """Test that the datetime widget lists the desired times
            on the individual slot admin page"""
@@ -91,6 +93,7 @@ class ScheduleDateTimeJSMixin:
         self.driver.get(f"{self.live_server_url}{slot_admin_change_url}")
         self.check_clock_button()
 
+    @test_timeout_debug
     def test_datetime_widget_schedule_block_admin(self):
         """Test that the datetime widget lists the desired times"""
         self.admin_login()

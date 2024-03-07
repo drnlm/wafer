@@ -8,6 +8,8 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 
 from wafer.users.models import PROFILE_GROUP
 
+import functools
+
 try:
     # Guard for running this without selenium installed
     from selenium import webdriver
@@ -55,6 +57,17 @@ def mock_avatar_url(self):
 
 # Time to wait for elements to appear - single constant so we can easily tune it if needed
 SELENIUM_WAIT_TIME = 40
+
+
+# Decorator to wrap TimeoutException
+def test_timeout_debug(func):
+    def wrapper(self, *args, **kwargs):
+        try:
+            func(self, *args, **kwargs)
+        except TimeoutException:
+            print(self.driver.page_source)
+            self.assertTrue(False)
+    return wrapper
 
 
 @tag('selenium')

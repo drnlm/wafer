@@ -21,7 +21,7 @@ from django.utils import timezone, version
 from django.urls import reverse
 
 from wafer.pages.models import Page
-from wafer.tests.utils import create_user, ChromeTestRunner, FirefoxTestRunner, SELENIUM_WAIT_TIME
+from wafer.tests.utils import create_user, ChromeTestRunner, FirefoxTestRunner, SELENIUM_WAIT_TIME, test_timeout_debug
 from wafer.talks.tests.fixtures import create_talk
 from wafer.talks.models import ACCEPTED
 
@@ -133,17 +133,22 @@ class EditorTestsMixin:
            expected_conditions.presence_of_element_located((By.TAG_NAME, "h1"))
         )
 
+    @test_timeout_debug
     def test_access_schedule_editor_no_login(self):
         """Test that the schedule editor isn't accessible if not logged in"""
         self.driver.get(self.edit_page)
-        if self.is_django_5:
-            header = WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
-                expected_conditions.presence_of_element_located((By.ID, "header"))
-            )
-        else:
-            header = WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
-                expected_conditions.presence_of_element_located((By.TAG_NAME, "true"))
-            )
+        try:
+            if self.is_django_5:
+                header = WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
+                    expected_conditions.presence_of_element_located((By.ID, "header"))
+                )
+            else:
+                header = WebDriverWait(self.driver, SELENIUM_WAIT_TIME).until(
+                    expected_conditions.presence_of_element_located((By.TAG_NAME, "h1"))
+                )
+        except TimeoutException:
+            print(self.driver.page_source)
+            self.assertTrue(False)
         self.assertIn('Django administration', header.text)
         login = self.driver.find_element(By.ID, "login-form")
         self.assertIsNotNone(login)
@@ -152,6 +157,7 @@ class EditorTestsMixin:
         with self.assertRaises(NoSuchElementException):
             self.driver.find_element(By.ID, 'allTalks')
 
+    @test_timeout_debug
     def test_access_schedule_editor_no_super(self):
         """Test that the schedule editor isn't accessible for non-superuser accounts"""
         self.normal_login()
@@ -173,6 +179,7 @@ class EditorTestsMixin:
         with self.assertRaises(NoSuchElementException):
             self.driver.find_element(By.ID, 'allTalks')
 
+    @test_timeout_debug
     def test_access_schedule_editor_admin(self):
         """Test that the schedule editor is accessible for superuser accounts"""
         self._start()
@@ -188,6 +195,7 @@ class EditorTestsMixin:
         talk_1_block = tab_pane.find_element(By.CLASS_NAME, "draggable")
         self.assertIn(self.talk1.title, talk_1_block.text)
 
+    @test_timeout_debug
     def test_drag_talk(self):
         """Test dragging talk behavior"""
         self.assertEqual(ScheduleItem.objects.count(), 0)
@@ -246,6 +254,7 @@ class EditorTestsMixin:
             self.assertNotIn(self.talk1.title, x.text)
             self.assertNotIn(self.talk4.title, x.text)
 
+    @test_timeout_debug
     def test_drag_page(self):
         """Test dragging page behavior"""
         self.assertEqual(ScheduleItem.objects.count(), 0)
@@ -321,6 +330,7 @@ class EditorTestsMixin:
         self.assertTrue(found2)
         self.assertEqual(tab_items, post_drag_tab_items)
 
+    @test_timeout_debug
     def test_swicth_day(self):
         """Test selecting different days"""
         # Create a couple of schedule items on each day
@@ -377,6 +387,7 @@ class EditorTestsMixin:
         with self.assertRaises(NoSuchElementException):
             self.driver.find_element(By.ID, f"scheduleItem{item2.pk}")
 
+    @test_timeout_debug
     def test_drag_over_talk(self):
         """Test that dragging over an item replaces it"""
         # Create a schedule with a single item
@@ -429,6 +440,7 @@ class EditorTestsMixin:
         self.assertFalse(found2)
         self.assertTrue(found1)
 
+    @test_timeout_debug
     def test_drag_over_page(self):
         """Test that dragging over a page with another page works"""
         # Create a schedule with a single item
@@ -477,6 +489,7 @@ class EditorTestsMixin:
             after.append(x.text)
         self.assertEqual(before, after)
 
+    @test_timeout_debug
     def test_adding_clash(self):
         """Test that introducing a speaker clash causes the
            error section to be updated"""
@@ -524,6 +537,7 @@ class EditorTestsMixin:
         error_item = validation.find_element(By.TAG_NAME, "li")
         self.assertIn('Common speaker', error_item.text)
 
+    @test_timeout_debug
     def test_removing_clash(self):
         """Test that removing a speaker clash causes the
            error section to be cleared"""
