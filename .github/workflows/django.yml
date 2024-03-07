@@ -92,4 +92,5 @@ jobs:
       if: matrix.browser == 'firefox'
     - name: Run Tests
       run: |
+        lscpu
         python manage.py test --tag ${{ matrix.browser }}
