@@ -4,7 +4,7 @@ import subprocess
 from setuptools import find_packages, setup
 
 REQUIRES = [
-    'Django>=3.2,<5',
+    'Django>=3.2,<5.1',
     'bleach',
     'bleach-allowlist',
     'crispy-bootstrap5',
@@ -15,7 +15,7 @@ REQUIRES = [
     'django-registration-redux',
     'django-reversion',
     'django-select2',
-    'djangorestframework',
+    'djangorestframework<3.15.2',
     'drf-extensions>=0.5.0',
     'icalendar>=4.0',
     'jsonfield',
@@ -44,7 +44,7 @@ def compile_translations():
 
 setup(
     name="wafer",
-    version="0.15.3a",
+    version="0.16.2a",
     url='http://github.com/CTPUG/wafer',
     license='ISC',
     description="A wafer-thin Django library for running small conferences.",

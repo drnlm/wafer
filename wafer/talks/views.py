@@ -18,11 +18,11 @@ from rest_framework.permissions import (
     BasePermission)
 from rest_framework_extensions.mixins import NestedViewSetMixin
 from reversion import revisions
-from reversion.models import Version
 
 from wafer.talks.models import (
     Review, Talk, TalkType, TalkUrl, Track,
-    ACCEPTED, CANCELLED, SUBMITTED, UNDER_CONSIDERATION, WITHDRAWN)
+    ACCEPTED, CANCELLED, PROVISIONAL, SUBMITTED, UNDER_CONSIDERATION,
+    WITHDRAWN)
 from wafer.talks.forms import ReviewForm, get_talk_form_class
 from wafer.talks.serializers import TalkSerializer, TalkUrlSerializer
 from wafer.users.models import UserProfile
@@ -45,22 +45,39 @@ class UsersTalks(PaginatedBuildableListView):
     build_prefix = 'talks'
     paginate_by = 100
 
-    @order_results_by('talk_type', 'talk_id')
     def get_queryset(self):
         # self.request will be None when we come here via the static site
         # renderer
         if self.request and Talk.can_view_all(self.request.user):
             talks = Talk.objects.all()
         else:
-            talks = Talk.objects.filter(Q(status=ACCEPTED) | Q(status=CANCELLED))
+            talks = Talk.objects.filter(
+                Q(status__in=(ACCEPTED, CANCELLED))
+                | Q(status__in=(SUBMITTED, UNDER_CONSIDERATION, PROVISIONAL),
+                    talk_type__show_pending_submissions=True)
+            )
+        if self.request:
+            if self.request.GET.get('sort') == 'track' and Track.objects.count() > 0:
+                talks = talks.order_by('talk_type', 'track')
+            elif self.request.GET.get('sort') == 'lang' and Talk.LANGUAGES:
+                talks = talks.order_by('talk_type', 'language')
+            elif self.request.GET.get('sort') == 'title':
+                talks = talks.order_by('talk_type', 'title')
+            else:
+                talks = talks.order_by('talk_type', 'talk_id')
+        else:
+            talks = talks.order_by('talk_type', 'talk_id')
         return talks.prefetch_related(
-            "talk_type", "corresponding_author", "authors", "authors__userprofile"
+            "talk_type", "corresponding_author", "authors", "authors__userprofile",
+            "track"
         )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["languages"] = Talk.LANGUAGES
+        context["tracks"] = Track.objects.count() > 0
         context["see_all"] = Talk.can_view_all(self.request.user)
+        context['sort'] = self.request.GET.get('sort', 'default')
         return context
 
 
@@ -314,8 +331,11 @@ class TalksViewSet(NestedViewSetMixin, viewsets.ModelViewSet):
         # to people who aren't part of the management group
         if self.request.user.id is None:
             # Anonymous user, so just accepted or cancelled talks
-            return Talk.objects.filter(Q(status=ACCEPTED) |
-                                       Q(status=CANCELLED))
+            return Talk.objects.filter(
+                Q(status__in=(ACCEPTED, CANCELLED))
+                | Q(status__in=(SUBMITTED, UNDER_CONSIDERATION, PROVISIONAL),
+                    talk_type__show_pending_submissions=True)
+            )
         elif Talk.can_view_all(self.request.user):
             return Talk.objects.all()
         else:
@@ -323,9 +343,11 @@ class TalksViewSet(NestedViewSetMixin, viewsets.ModelViewSet):
             # XXX: Should this be all authors rather than just
             # the corresponding author?
             return Talk.objects.filter(
-                Q(status=ACCEPTED) |
-                Q(status=CANCELLED) |
-                Q(corresponding_author=self.request.user))
+                Q(status__in=(ACCEPTED, CANCELLED))
+                | Q(status__in=(SUBMITTED, UNDER_CONSIDERATION, PROVISIONAL),
+                    talk_type__show_pending_submissions=True)
+                | Q(corresponding_author=self.request.user)
+            )
 
 
 class TalkExistsPermission(BasePermission):

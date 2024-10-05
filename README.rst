@@ -3,10 +3,10 @@ wafer
 
 |wafer-ci-badge| |wafer-docs-badge| |wafer-weblate-badge|
 
-.. |wafer-ci-badge| image:: https://travis-ci.org/CTPUG/wafer.png?branch=master
-    :alt: Travis CI build status
+.. |wafer-ci-badge| image:: https://github.com/CTPUG/wafer/actions/workflows/django.yml/badge.svg
+    :alt: Github actions CI build status
     :scale: 100%
-    :target: https://travis-ci.org/CTPUG/wafer
+    :target: https://github.com/CTPUG/wafer/actions/
 
 .. |wafer-docs-badge| image:: https://readthedocs.org/projects/wafer/badge/?version=latest
     :alt: Wafer documentation
@@ -35,7 +35,7 @@ Available on `readthedocs.org`_.
 Supported Django versions
 =========================
 
-Wafer supports Django 3.2 and Django 4.0 - 4.2.
+Wafer supports Django 3.2, Django 4.0 - 4.2 and Django 5.0 .
 
 Installation
 ============
@@ -76,7 +76,7 @@ Installation
 7. Wafer uses the Django caching infrastructure in several places, so
    the cache table needs to be created using ``manage.py createcachetable``.
 
-8. Create the default 'Page Editors' and 'Talk Mentors' groups using
+8. Create the default 'Page Editors', 'Talk Mentors' and other useful groups using
    ``manage.py wafer_add_default_groups``.
 
 9. Log in and configure the Site:
@@ -118,3 +118,16 @@ Translation
 Translations for wafer are managed at `weblate.org`_
 
 .. _weblate.org: https://hosted.weblate.org/projects/wafer/
+
+
+Selenium tests
+==============
+
+wafer includes a small set of selenium tests to test various bits of javascript
+used in the site (mostly in the schedule editor).
+
+To run the tests, you will need to install selenium - ``pip install selenium``
+and also run ``npm install`` to install the required javascript dependencies.
+
+The tests can be run using the ``selenium`` tag, or using the individual browser
+tags (currently ``firefox`` and ``chrome``).

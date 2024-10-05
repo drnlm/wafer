@@ -2,13 +2,13 @@
 
 import mock
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from wafer.tests.api_utils import SortedResultsClient
 from wafer.tests.utils import create_user, mock_avatar_url
 from wafer.talks.models import (
-    Talk, TalkUrl, ACCEPTED, REJECTED, SUBMITTED, UNDER_CONSIDERATION,
+    Talk, TalkUrl, Track, ACCEPTED, REJECTED, SUBMITTED, UNDER_CONSIDERATION,
     CANCELLED, PROVISIONAL, WITHDRAWN)
 from wafer.talks.tests.fixtures import create_talk, create_talk_type
 
@@ -52,13 +52,208 @@ class UsersTalksTests(TestCase):
                               self.talk_s, self.talk_u, self.talk_c]))
 
 
+class TalksListLayoutTests(TestCase):
+    """Test the table layout with different options
+
+       We test this with both no talks and talks so we can check both headers and the
+       span for the 'No Accepted Talks' line.
+
+       Some tests moneky-patch Talk.LANGUAGES - this is to avoid needing to re-import
+       Talk with modified settings to achieve the same result"""
+
+    def setUp(self):
+        self.client = Client()
+
+    def tearDown(self):
+        """Ensure Talk monkey-patching doesn't leak"""
+        Talk.LANGUAGES = ()
+
+    def test_no_options(self):
+        """Test that we have the right layout if no tracks or languages"""
+        response = self.client.get('/talks/')
+        self.assertFalse(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 0)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertNotContains(response, 'Track', html=True)
+        self.assertNotContains(response, 'Language', html=True)
+        self.assertContains(response, '<td colspan="2">\nNo talks accepted yet.\n</td>', html=True)
+
+        talk1 = create_talk('Talk 1', ACCEPTED, 'author_a')
+        response = self.client.get('/talks/')
+        self.assertFalse(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 0)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertNotContains(response, 'Track', html=True)
+        self.assertNotContains(response, 'Language', html=True)
+        self.assertNotContains(response, '<td colspan="2">\nNo talks accepted yet.\n</td>', html=True)
+
+    def test_language(self):
+        """Test that we have the right layout if languages, but no tracks"""
+        Talk.LANGUAGES = (('en', 'English'),)
+
+        response = self.client.get('/talks/')
+        self.assertFalse(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 1)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertNotContains(response, 'Track', html=True)
+        self.assertContains(response, 'Language', html=True)
+        self.assertContains(response, '<td colspan="3">\nNo talks accepted yet.\n</td>', html=True)
+
+        talk1 = create_talk('Talk 1', ACCEPTED, 'author_a')
+        response = self.client.get('/talks/')
+        self.assertFalse(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 1)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertNotContains(response, 'Track', html=True)
+        self.assertContains(response, 'Language', html=True)
+        self.assertNotContains(response, '<td colspan="3">\nNo talks accepted yet.\n</td>', html=True)
+
+    def test_track(self):
+        """Test that we have the right layout if tracks, but no languages"""
+        track1 = Track.objects.create(name="Test Track 1")
+        response = self.client.get('/talks/')
+        self.assertTrue(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 0)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertContains(response, 'Track', html=True)
+        self.assertNotContains(response, 'Language', html=True)
+        self.assertContains(response, '<td colspan="3">\nNo talks accepted yet.\n</td>', html=True)
+
+        talk1 = create_talk('Talk 1', ACCEPTED, 'author_a')
+        response = self.client.get('/talks/')
+        self.assertTrue(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 0)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertContains(response, 'Track', html=True)
+        self.assertNotContains(response, 'Language', html=True)
+        self.assertNotContains(response, '<td colspan="3">\nNo talks accepted yet.\n</td>', html=True)
+
+
+    def test_track_and_language(self):
+        """Test that we have the right layout if we have tracks and languages"""
+        track1 = Track.objects.create(name="Test Track 1")
+        Talk.LANGUAGES = (('en', 'English'),)
+
+        response = self.client.get('/talks/')
+        self.assertTrue(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 1)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertContains(response, 'Track', html=True)
+        self.assertContains(response, 'Language', html=True)
+        self.assertContains(response, '<td colspan="4">\nNo talks accepted yet.\n</td>', html=True)
+
+        talk1 = create_talk('Talk 1', ACCEPTED, 'author_a')
+        response = self.client.get('/talks/')
+        self.assertTrue(response.context['tracks'])
+        self.assertEqual(len(response.context['languages']), 1)
+        self.assertContains(response, 'Talk', html=True)
+        self.assertContains(response, 'Speakers', html=True)
+        self.assertContains(response, 'Track', html=True)
+        self.assertContains(response, 'Language', html=True)
+        self.assertNotContains(response, '<td colspan="4">\nNo talks accepted yet.\n</td>', html=True)
+
+
+class TalksListSortingTests(TestCase):
+    """Test the table sorting options.
+
+       This monkey-patches TALKS.languages for the same reason as the layout tests.
+       """
+
+    def setUp(self):
+        """Create talks and tracks"""
+        self.client = Client()
+        Talk.LANGUAGES = (('en', 'English'), ('de', 'German'))
+
+        author = create_user('author_a')
+
+        # We choose the names so that they sort differently from creation order
+        track2 = Track.objects.create(name="Test Track 2", order=2)
+        track1 = Track.objects.create(name="Test Track 1", order=1)
+
+        talk_d = create_talk('Talk D', ACCEPTED, user=author, talk_track=track1,
+                                 language='en')
+        talk_c = create_talk('Talk C', ACCEPTED, user=author, talk_track=track2,
+                                 language='de')
+        talk_b = create_talk('Talk B', ACCEPTED, user=author, talk_track=track1,
+                                 language='de')
+        talk_a = create_talk('Talk A', ACCEPTED, user=author, talk_track=track2,
+                                 language='en')
+
+    def tearDown(self):
+        """Ensure Talk monkey-patching doesn't leak"""
+        Talk.LANGUAGES = ()
+
+    def test_no_sorting(self):
+        response = self.client.get('/talks/')
+        # We check via find to avoid hardcoding too much HTML here
+        pos_talk_a = response.content.find(b'Talk A')
+        pos_talk_b = response.content.find(b'Talk B')
+        pos_talk_c = response.content.find(b'Talk C')
+        pos_talk_d = response.content.find(b'Talk D')
+        # Order should be D, C, B, A (id order)
+        self.assertGreater(pos_talk_a, pos_talk_b)
+        self.assertGreater(pos_talk_b, pos_talk_c)
+        self.assertGreater(pos_talk_c, pos_talk_d)
+
+    def test_sort_title(self):
+        response = self.client.get('/talks/?sort=title')
+        pos_talk_a = response.content.find(b'Talk A')
+        pos_talk_b = response.content.find(b'Talk B')
+        pos_talk_c = response.content.find(b'Talk C')
+        pos_talk_d = response.content.find(b'Talk D')
+        # Should be A, B, C, D
+        self.assertGreater(pos_talk_b, pos_talk_a)
+        self.assertGreater(pos_talk_c, pos_talk_b)
+        self.assertGreater(pos_talk_d, pos_talk_c)
+
+    def test_sort_track(self):
+        response = self.client.get('/talks/?sort=track')
+        pos_talk_a = response.content.find(b'Talk A')
+        pos_talk_b = response.content.find(b'Talk B')
+        pos_talk_c = response.content.find(b'Talk C')
+        pos_talk_d = response.content.find(b'Talk D')
+
+        # track 1 (B, D) should sort before track 2 (A, C)
+        self.assertGreater(pos_talk_a, pos_talk_b)
+        self.assertGreater(pos_talk_c, pos_talk_b)
+        self.assertGreater(pos_talk_a, pos_talk_d)
+        self.assertGreater(pos_talk_c, pos_talk_d)
+
+    def test_sort_lang(self):
+        response = self.client.get('/talks/?sort=lang')
+        pos_talk_a = response.content.find(b'Talk A')
+        pos_talk_b = response.content.find(b'Talk B')
+        pos_talk_c = response.content.find(b'Talk C')
+        pos_talk_d = response.content.find(b'Talk D')
+
+        # de (B, C) should sort before en (A, D)
+        self.assertGreater(pos_talk_a, pos_talk_b)
+        self.assertGreater(pos_talk_a, pos_talk_c)
+        self.assertGreater(pos_talk_d, pos_talk_b)
+        self.assertGreater(pos_talk_d, pos_talk_c)
+
+
 class TalkViewTests(TestCase):
     def setUp(self):
+        public_type = create_talk_type(name="BoF", show_pending_submissions=True)
         self.talk_a = create_talk("Talk A", ACCEPTED, "author_a")
         self.talk_r = create_talk("Talk R", REJECTED, "author_r")
         self.talk_s = create_talk("Talk S", SUBMITTED, "author_s")
+        self.talk_sp = create_talk("Talk SP", SUBMITTED, "author_sp",
+                                   talk_type=public_type)
         self.talk_u = create_talk("Talk U", UNDER_CONSIDERATION, "author_u")
+        self.talk_up = create_talk("Talk UP", UNDER_CONSIDERATION, "author_up",
+                                   talk_type=public_type)
         self.talk_p = create_talk("Talk P", PROVISIONAL, "author_p")
+        self.talk_pp = create_talk("Talk PP", PROVISIONAL, "author_pp",
+                                   talk_type=public_type)
         self.talk_c = create_talk("Talk C", CANCELLED, "author_c")
         self.client = Client()
 
@@ -77,14 +272,23 @@ class TalkViewTests(TestCase):
     def test_view_cancelled_not_logged_in(self):
         self.check_talk_view(self.talk_c, 200)
 
+    def test_view_public_submitted_not_logged_in(self):
+        self.check_talk_view(self.talk_sp, 200)
+
     def test_view_submitted_not_logged_in(self):
         self.check_talk_view(self.talk_s, 403)
 
     def test_view_consideration_not_logged_in(self):
         self.check_talk_view(self.talk_u, 403)
 
+    def test_view_public_consideration_not_logged_in(self):
+        self.check_talk_view(self.talk_up, 200)
+
     def test_view_provisional_not_logged_in(self):
         self.check_talk_view(self.talk_p, 403)
+
+    def test_view_public_provisional_not_logged_in(self):
+        self.check_talk_view(self.talk_pp, 200)
 
     def test_view_accepted_author(self):
         self.check_talk_view(self.talk_a, 200, auth={

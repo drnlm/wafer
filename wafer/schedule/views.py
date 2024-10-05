@@ -20,6 +20,9 @@ from django.views.generic import TemplateView, View
 from bakery.views import BuildableDetailView, BuildableTemplateView, BuildableMixin
 from rest_framework import viewsets
 from rest_framework.permissions import IsAdminUser
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+
 from wafer import __version__
 from wafer.pages.models import Page
 from wafer.schedule.models import (
@@ -169,7 +172,13 @@ class ScheduleView(BuildableTemplateView):
         context['prev_block'] = None
         context['next_block'] = None
         if not check_schedule():
+            if self.request.user.is_staff:
+                context['validation_errors'] = validate_schedule()
             return context
+        if settings.WAFER_HIDE_SCHEDULE:
+            if not self.request.user.is_staff:
+                return context
+            context['draft_warning'] = True
         context['active'] = True
         try:
             block_id = int(self.request.GET.get('block', -1))
@@ -232,7 +241,11 @@ class CurrentView(TemplateView):
         except ValueError as e:
             messages.error(self.request,
                            'Failed to parse timestamp: %s' % e)
+            # Short circuit out here
+            return None
         if timestamp is None:
+            # If parse_datetime completely fails to extract anything
+            # we end up here
             messages.error(self.request, 'Failed to parse timestamp')
             return None
         if not timezone.is_aware(timestamp):
@@ -295,8 +308,19 @@ class CurrentView(TemplateView):
         # If the schedule is invalid, return a context with active=False
         context['active'] = False
         if not check_schedule():
+            if self.request.user.is_staff:
+                context['validation_errors'] = validate_schedule()
             return context
-        # The schedule is valid, so add active=True and empty slots
+        # The schedule is valid
+        if settings.WAFER_HIDE_SCHEDULE:
+            if not self.request.user.is_staff:
+                # The schedule is hidden, and the user doesn't get to see
+                # the draft version
+                return context
+            # Display the 'This is a draft warning' because we're hiding the
+            # schedule
+            context['draft_warning'] = True
+        # We're displaying the schedule so add active=True and empty slots
         context['active'] = True
         context['slots'] = []
         # Allow refresh time to be overridden
@@ -322,6 +346,15 @@ class CurrentView(TemplateView):
         context['slots'].extend(current_rows)
 
         return context
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def get_validation_info(request):
+    """API wrapper around validate schedule for use in the schedule
+       editor"""
+    errors = validate_schedule()
+    return Response({'Validation Status': errors})
 
 
 class ScheduleItemViewSet(viewsets.ModelViewSet):

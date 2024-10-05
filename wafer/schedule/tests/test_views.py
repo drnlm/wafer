@@ -991,6 +991,114 @@ class ScheduleViewTests(TestCase):
             items[2].get_details(),
             '</a></td>']), html=True)
 
+    def test_view_invalid(self):
+        """Test that invalid schedules return a inactive schedule."""
+        day1 = ScheduleBlock.objects.create(
+            start_time=D.datetime(2013, 9, 22, 7, 0, 0,
+                                  tzinfo=D.timezone.utc),
+            end_time=D.datetime(2013, 9, 22, 19, 0, 0,
+                                tzinfo=D.timezone.utc),
+            )
+        venue1 = Venue.objects.create(order=1, name='Venue 1')
+        venue1.blocks.add(day1)
+        start1 = D.datetime(2013, 9, 22, 10, 0, 0, tzinfo=D.timezone.utc)
+        start2 = D.datetime(2013, 9, 22, 11, 0, 0, tzinfo=D.timezone.utc)
+        end = D.datetime(2013, 9, 22, 12, 0, 0, tzinfo=D.timezone.utc)
+        cur1 = D.datetime(2013, 9, 22, 10, 30, 0, tzinfo=D.timezone.utc)
+
+        slot1 = Slot.objects.create(start_time=start1, end_time=start2)
+        slot2 = Slot.objects.create(start_time=start1, end_time=end)
+
+        talk = create_talk('Test talk', status=ACCEPTED, username='john')
+
+        item1 = ScheduleItem.objects.create(venue=venue1,
+                                            talk_id=talk.pk)
+        item1.slots.add(slot1)
+        item2 = ScheduleItem.objects.create(venue=venue1,
+                                            talk_id=talk.pk)
+        item2.slots.add(slot2)
+
+        c = Client()
+        response = c.get('/schedule/')
+        assert response.context['active'] is False
+        assert 'validation_errors' not in response.context
+
+        # Check the logged in users get the same result
+        ordinary = create_client('jill', False)
+        response = ordinary.get('/schedule/')
+        assert response.context['active'] is False
+        assert 'validation_errors' not in response.context
+
+        # Check that a user with elevated privileges sees validation errors
+        admin = create_client('admin', True)
+
+        response = admin.get('/schedule/')
+        assert response.context['active'] is False
+        assert 'validation_errors' in response.context
+
+    def test_view_hidden(self):
+        """Test that the schedule is hidden by the appropriate setting."""
+        with self.settings(WAFER_HIDE_SCHEDULE=True):
+
+            day1 = ScheduleBlock.objects.create(start_time=D.datetime(2013, 9, 22, 1, 0, 0,
+                                                                      tzinfo=D.timezone.utc),
+                                                end_time=D.datetime(2013, 9, 22, 23, 0, 0,
+                                                                    tzinfo=D.timezone.utc),
+                                                )
+            day2 = ScheduleBlock.objects.create(start_time=D.datetime(2013, 9, 23, 1, 0, 0,
+                                                                      tzinfo=D.timezone.utc),
+                                                end_time=D.datetime(2013, 9, 23, 23, 0, 0,
+                                                                    tzinfo=D.timezone.utc),
+                                                )
+            venue1 = Venue.objects.create(order=1, name='Venue 1')
+            venue1.blocks.add(day1)
+            venue1.blocks.add(day2)
+            venue2 = Venue.objects.create(order=2, name='Venue 2')
+            venue2.blocks.add(day1)
+            venue2.blocks.add(day2)
+
+            start1 = D.datetime(2013, 9, 22, 10, 0, 0, tzinfo=D.timezone.utc)
+            start2 = D.datetime(2013, 9, 22, 11, 0, 0, tzinfo=D.timezone.utc)
+            end1 = D.datetime(2013, 9, 22, 12, 0, 0, tzinfo=D.timezone.utc)
+
+            start3 = D.datetime(2013, 9, 23, 12, 0, 0, tzinfo=D.timezone.utc)
+            end2 = D.datetime(2013, 9, 23, 13, 0, 0, tzinfo=D.timezone.utc)
+
+            pages = make_pages(6)
+            venues = [venue1, venue1, venue1, venue2, venue2, venue2]
+            items = make_items(venues, pages)
+
+            slot1 = Slot.objects.create(start_time=start1, end_time=start2)
+            slot2 = Slot.objects.create(start_time=start2, end_time=end1)
+            slot3 = Slot.objects.create(start_time=start3, end_time=end2)
+
+            items[0].slots.add(slot1)
+            items[3].slots.add(slot1)
+            items[1].slots.add(slot2)
+            items[4].slots.add(slot2)
+            items[2].slots.add(slot3)
+            items[5].slots.add(slot3)
+
+
+            c = Client()
+            response = c.get('/schedule/')
+            assert response.context['active'] is False
+            assert 'draft_warning' not in response.context
+
+            # Check the logged in users get the same result
+            ordinary = create_client('jill', False)
+            response = ordinary.get('/schedule/')
+            assert response.context['active'] is False
+            assert 'draft_warning' not in response.context
+
+            # Check that a user with elevated privileges sees the schedule
+            # and the appropriate warning
+            admin = create_client('admin', True)
+
+            response = admin.get('/schedule/')
+            assert response.context['active'] is True
+            assert 'draft_warning' in response.context
+
 
 class CurrentViewTests(TestCase):
 
@@ -1383,6 +1491,53 @@ class CurrentViewTests(TestCase):
             items[5].get_details(),
             '</a></td>']), html=True)
 
+    def test_current_view_invalid_timestamp(self):
+        """Test that invalid timestamps are treated as no timestamp"""
+        day1 = ScheduleBlock.objects.create(
+            start_time=D.datetime.now(tz=D.timezone.utc) - D.timedelta(minutes=120),
+            end_time=D.datetime.now(tz=D.timezone.utc) + D.timedelta(minutes=120)
+            )
+        venue1 = Venue.objects.create(order=1, name='Venue 1')
+        venue2 = Venue.objects.create(order=2, name='Venue 2')
+        venue1.blocks.add(day1)
+        venue2.blocks.add(day1)
+
+        start1 = D.datetime.now(tz=D.timezone.utc) - D.timedelta(minutes=45)
+        start2 = D.datetime.now(tz=D.timezone.utc) + D.timedelta(minutes=30)
+        end = D.datetime.now(tz=D.timezone.utc) + D.timedelta(minutes=90)
+
+        slots = []
+
+        slots.append(Slot.objects.create(start_time=start1, end_time=start2))
+        slots.append(Slot.objects.create(start_time=start2, end_time=end))
+
+        pages = make_pages(4)
+        venues = [venue1, venue2] * 2
+        items = make_items(venues, pages)
+
+        for index, item in enumerate(items):
+            item.slots.add(slots[index // 2])
+
+        c = Client()
+
+        default_view = c.get('/schedule/current/')
+
+        # Try with complete nonsense
+        response = c.get('/schedule/current/',
+                         {'timestamp': 'this_is_not_a_timestamp'})
+        self.assertEqual(len(response.context['slots']), 2)
+        self.assertEqual(default_view.context['cur_slot'], response.context['cur_slot'])
+        # We compare the __repr__'s, because of how the objects are created
+        self.assertEqual(str(default_view.context['slots']), str(response.context['slots']))
+
+        # Try with a timestamp that give a ValueError
+        response = c.get('/schedule/current/',
+                        {'timestamp': '2016-12-32T12:00:00'})
+        self.assertEqual(len(response.context['slots']), 2)
+        self.assertEqual(default_view.context['cur_slot'], response.context['cur_slot'])
+        self.assertEqual(str(default_view.context['slots']), str(response.context['slots']))
+
+
     def test_current_view_invalid(self):
         """Test that invalid schedules return a inactive current view."""
         day1 = ScheduleBlock.objects.create(
@@ -1414,6 +1569,83 @@ class CurrentViewTests(TestCase):
         response = c.get('/schedule/current/',
                          {'timestamp': cur1.isoformat()})
         assert response.context['active'] is False
+        assert 'validation_errors' not in response.context
+
+        # Check the logged in users get the same result
+        ordinary = create_client('jill', False)
+        response = ordinary.get('/schedule/current/',
+                                {'timestamp': cur1.isoformat()})
+        assert response.context['active'] is False
+        assert 'validation_errors' not in response.context
+
+        # Check that a user with elevated privileges sees validation errors
+        admin = create_client('admin', True)
+
+        response = admin.get('/schedule/current/',
+                             {'timestamp': cur1.isoformat()})
+        assert response.context['active'] is False
+        assert 'validation_errors' in response.context
+
+    def test_view_hidden(self):
+        """Test that the schedule is hidden by the appropriate setting."""
+        with self.settings(WAFER_HIDE_SCHEDULE=True):
+
+            day1 = ScheduleBlock.objects.create(start_time=D.datetime(2013, 9, 22, 1, 0, 0,
+                                                                      tzinfo=D.timezone.utc),
+                                                end_time=D.datetime(2013, 9, 22, 23, 0, 0,
+                                                                    tzinfo=D.timezone.utc),
+                                                )
+            day2 = ScheduleBlock.objects.create(start_time=D.datetime(2013, 9, 23, 1, 0, 0,
+                                                                      tzinfo=D.timezone.utc),
+                                                end_time=D.datetime(2013, 9, 23, 23, 0, 0,
+                                                                    tzinfo=D.timezone.utc),
+                                                )
+            venue1 = Venue.objects.create(order=1, name='Venue 1')
+            venue1.blocks.add(day1)
+            venue1.blocks.add(day2)
+            venue2 = Venue.objects.create(order=2, name='Venue 2')
+            venue2.blocks.add(day1)
+            venue2.blocks.add(day2)
+
+            start1 = D.datetime(2013, 9, 22, 10, 0, 0, tzinfo=D.timezone.utc)
+            start2 = D.datetime(2013, 9, 22, 11, 0, 0, tzinfo=D.timezone.utc)
+            end1 = D.datetime(2013, 9, 22, 12, 0, 0, tzinfo=D.timezone.utc)
+
+            start3 = D.datetime(2013, 9, 23, 12, 0, 0, tzinfo=D.timezone.utc)
+            end2 = D.datetime(2013, 9, 23, 13, 0, 0, tzinfo=D.timezone.utc)
+
+            pages = make_pages(6)
+            venues = [venue1, venue1, venue1, venue2, venue2, venue2]
+            items = make_items(venues, pages)
+
+            slot1 = Slot.objects.create(start_time=start1, end_time=start2)
+            slot2 = Slot.objects.create(start_time=start2, end_time=end1)
+            slot3 = Slot.objects.create(start_time=start3, end_time=end2)
+
+            items[0].slots.add(slot1)
+            items[3].slots.add(slot1)
+            items[1].slots.add(slot2)
+            items[4].slots.add(slot2)
+            items[2].slots.add(slot3)
+            items[5].slots.add(slot3)
+
+            c = Client()
+            response = c.get('/schedule/current/')
+            assert response.context['active'] is False
+            assert 'draft_warning' not in response.context
+
+            # Check the logged in users get the same result
+            ordinary = create_client('jill', False)
+            response = ordinary.get('/schedule/current/')
+            assert response.context['active'] is False
+            assert 'draft_warning' not in response.context
+
+            # Check that a user with elevated privileges sees validation errors
+            admin = create_client('admin', True)
+
+            response = admin.get('/schedule/current/')
+            assert response.context['active'] is True
+            assert 'draft_warning' in response.context
 
 
 class NonHTMLViewTests(TestCase):
