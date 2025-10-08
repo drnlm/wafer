@@ -283,7 +283,7 @@ class Talk(models.Model):
             key=lambda author: u'' if author == self.corresponding_author
                                else author.userprofile.display_name())
         names = [author.userprofile.display_name() for author in authors]
-        if len(names) <= 2:
+        if len(names) <= settings.WAFER_SCHEDULE_MAX_AUTHORS:
             return u' & '.join(names)
         return _(u'%s, et al.') % names[0]
 
@@ -417,9 +417,17 @@ class Review(models.Model):
     is_current.boolean = True
 
     class Meta:
+        # Permission to allow pulling all reviews via the API
+        permissions = (
+            ("view_all_reviews", "Can see all reiews via the api"),
+        )
         unique_together = (('talk', 'reviewer'),)
         verbose_name = _('review')
         verbose_name_plural = _('reviews')
+
+    @classmethod
+    def can_view_all(cls, user):
+        return user.has_perm('talks.view_all_reviews')
 
 
 @reversion.register()

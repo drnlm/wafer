@@ -24,7 +24,7 @@ from wafer.talks.models import (
     ACCEPTED, CANCELLED, PROVISIONAL, SUBMITTED, UNDER_CONSIDERATION,
     WITHDRAWN)
 from wafer.talks.forms import ReviewForm, get_talk_form_class
-from wafer.talks.serializers import TalkSerializer, TalkUrlSerializer
+from wafer.talks.serializers import TalkSerializer, TalkUrlSerializer, ReviewSerializer
 from wafer.users.models import UserProfile
 from wafer.utils import order_results_by, PaginatedBuildableListView
 
@@ -77,6 +77,8 @@ class UsersTalks(PaginatedBuildableListView):
         context["languages"] = Talk.LANGUAGES
         context["tracks"] = Track.objects.count() > 0
         context["see_all"] = Talk.can_view_all(self.request.user)
+        context["includes_pending"] = TalkType.objects.filter(
+            show_pending_submissions=True).exists()
         context['sort'] = self.request.GET.get('sort', 'default')
         return context
 
@@ -356,6 +358,19 @@ class TalkExistsPermission(BasePermission):
         if not Talk.objects.filter(pk=talk_id).exists():
             raise Http404
         return True
+
+
+class ReviewViewSet(NestedViewSetMixin, viewsets.ReadOnlyModelViewSet):
+    """API endpoint for viewing all the reviews"""
+    serializer_class = ReviewSerializer
+    permission_classes = (DjangoModelPermissions, )
+
+    @order_results_by('id')
+    def get_queryset(self):
+        if Review.can_view_all(self.request.user):
+            # Only return the reviews for users with the correct permission
+            return Review.objects.filter(talk_id=self.get_parents_query_dict()['talk'])
+        return Review.objects.none()
 
 
 class TalkUrlsViewSet(NestedViewSetMixin, viewsets.ModelViewSet):
