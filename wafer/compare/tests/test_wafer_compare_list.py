@@ -47,13 +47,13 @@ class TestBasicCompareList(TestCase):
         """Check that diffs look sensible"""
         self.client.login(username="super", password="super_password")
         response = self.client.get('/talks/')
-        print(respone.content)
+        print(response.content.decode('utf8'))
         response = self.client.get(f'/admin/talks/talk/{self.talk_a.pk}/')
-        print(response.content)
+        print(response.content.decode('utf8'))
         response = self.client.get(f'/admin/talks/talk/{self.talk_a.pk}/comparelist/')
-        print(response.content)
+        print(response.content.decode('utf8'))
         response = self.client.get(f'/admin/talks/talk/{self.talk_a.pk}/2/compare/')
-        print(response.content)
+        print(response.content.decode('utf8'))
         # Check that the 'not' we added is marked
         # This should maybe a regex to avoid assumptions about the whitespace
         # positioning.
