@@ -32,6 +32,10 @@ class TestBasicCompareList(TestCase):
             self.talk_a.save()
         self.client = Client()
 
+    def tearDown(self):
+        """Cleanup, because postgres and reversion work a bit differently"""
+        self.talk_a.delete()
+
     def test_get_compare_list(self):
         """Get the compare list and check the number of entries"""
         self.client.login(username="super", password="super_password")
