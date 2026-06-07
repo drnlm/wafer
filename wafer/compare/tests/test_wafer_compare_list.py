@@ -1,5 +1,7 @@
 # This tests the basic compare list, to ensure it's working as expected
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.utils.timezone import datetime, now
 
@@ -32,32 +34,21 @@ class TestBasicCompareList(TestCase):
             self.talk_a.save()
         self.client = Client()
 
-    def tearDown(self):
-        """Cleanup, because postgres and reversion work a bit differently"""
-        self.talk_a.delete()
+        # We use an re here as the revision numbers aren't guaranteed to be stable
+        # across different databases
+        self.compare_re = re.compile('/admin/talks/talk/[0-9]+/[0-9]+/compare/')
 
     def test_get_compare_list(self):
         """Get the compare list and check the number of entries"""
         self.client.login(username="super", password="super_password")
         response = self.client.get(f'/admin/talks/talk/{self.talk_a.pk}/comparelist/')
         # Check we have 3 revisions to compare
-        self.assertIn(b'/1/compare', response.content)
-        self.assertIn(b'/2/compare', response.content)
-        self.assertIn(b'/3/compare', response.content)
-        # Check that we don't have unexpcted ones
-        self.assertNotIn(b'/4/compare', response.content)
-
-    def test_get_diffs(self):
-        """Check that diffs look sensible"""
-        self.client.login(username="super", password="super_password")
-        response = self.client.get('/talks/')
-        print(response.content.decode('utf8'))
-        response = self.client.get(f'/admin/talks/talk/{self.talk_a.pk}/')
-        print(response.content.decode('utf8'))
-        response = self.client.get(f'/admin/talks/talk/{self.talk_a.pk}/comparelist/')
-        print(response.content.decode('utf8'))
-        response = self.client.get(f'/admin/talks/talk/{self.talk_a.pk}/2/compare/')
-        print(response.content.decode('utf8'))
+        results = self.compare_re.findall(response.content.decode())
+        self.assertEqual(len(results), 3)
+        # Check that diffs look sensible - we grab the second to look at the
+        # abstract changes
+        url = results[1]
+        response = self.client.get(url)
         # Check that the 'not' we added is marked
         # This should maybe a regex to avoid assumptions about the whitespace
         # positioning.
